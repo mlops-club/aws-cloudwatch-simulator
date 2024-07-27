@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 from datetime import datetime, time, date
 from typing import List, Dict, Any, Tuple
 from utils import generate_random_data, calculate_percentile, evaluate_alarm_state, aggregate_data
+from textwrap import dedent
 
 # Constants
 HARD_CODED_DATE = date(2024, 7, 26)
@@ -84,9 +85,11 @@ def summary_by_period_form() -> None:
     period_length_input = st.selectbox("Period Length", ['1min', '5min', '15min'], key='period_length_input', help="Select the period length for aggregating the summary data.")
     if not st.session_state.df.empty:
         st.session_state.summary_by_period_df = aggregate_data(st.session_state.df, period_length_input)
+    else:
+        st.warning("No data available to aggregate.")
 
 def alarm_state_form() -> None:
-    threshold_input = st.number_input("Threshold (ms)", min_value=50, max_value=300, value=150, key='threshold_input', help="Specify the threshold value for evaluating the alarm state.")
+    threshold_input = st.slider("Threshold (ms)", min_value=50, max_value=300, value=150, key='threshold_input', help="Specify the threshold value for evaluating the alarm state.")
     datapoints_to_alarm_input = st.number_input("Datapoints to Alarm", min_value=1, value=3, key='datapoints_to_alarm_input', help="Specify the number of data points required to trigger an alarm.")
     evaluation_range_input = st.number_input("Evaluation Range", min_value=1, value=5, key='evaluation_range_input', help="Specify the range of data points to evaluate for alarm state.")
     aggregation_function_input = st.selectbox(
@@ -183,7 +186,7 @@ def display_key_tables() -> None:
     # Symbols
     st.write("#### Symbols")
     symbol_data = {
-        "Symbol": ["X", "-", "0"],
+        "Symbol": ["🔴", "⚫️", "🟢"],
         "Meaning": [
             "Breaching data point: This data point exceeds the threshold.",
             "Missing data point: This data point is missing or not reported.",
@@ -194,14 +197,22 @@ def display_key_tables() -> None:
     st.table(symbol_df)
 
     # Columns
-    st.write("#### Columns")
+    st.write(dedent("""\
+    #### Columns: Strategies for handling missing data points [docs](https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/AlarmThatSendsEmail.html#alarms-and-missing-data)
+             
+    Sometimes, no metric events may have been reported during a given time period. In this case,
+    you must decide how you will treat missing data points. Ignore it? Or consider it a failure.
+             
+    Here are the 4 supported strategies in AWS:
+    """))
+
     column_data = {
-        "Column": ["MISSING", "IGNORE", "BREACHING", "NOT BREACHING"],
-        "Meaning": [
-            "Action to take when all data points are missing. Possible values: INSUFFICIENT_DATA, Retain current state, ALARM, OK.",
-            "Action to take when data points are missing but ignored. Possible values: Retain current state, ALARM, OK.",
-            "Action to take when missing data points are treated as breaching. Possible values: ALARM, OK.",
-            "Action to take when missing data points are treated as not breaching. Possible values: ALARM, OK."
+        "Strategy": ["missing", "ignore", "breaching", "notBreaching"],
+        "Explanation": [
+            "If all data points in the alarm evaluation range are missing, the alarm transitions to INSUFFICIENT_DATA. Possible values: INSUFFICIENT_DATA, Retain current state, ALARM, OK.",
+            "The current alarm state is maintained. Possible values: Retain current state, ALARM, OK.",
+            "Missing data points are treated as \"bad\" and breaching the threshold. Possible values: ALARM, OK.",
+            "Missing data points are treated as \"good\" and within the threshold. Possible values: ALARM, OK."
         ]
     }
     column_df = pd.DataFrame(column_data)

@@ -42,8 +42,7 @@ def calculate_percentile(
     freq: str,
     percentile: float
 ) -> pd.DataFrame:
-    percentile_df: pd.DataFrame = df.groupby(pd.Grouper(key='Timestamp', freq=freq))["ResponseTime(ms)"]\
-                                    .quantile(percentile).reset_index(name=f"p{int(percentile * 100)}_ResponseTime(ms)")
+    percentile_df: pd.DataFrame = df.groupby(pd.Grouper(key='Timestamp', freq=freq))["ResponseTime(ms)"]                                    .quantile(percentile).reset_index(name=f"p{int(percentile * 100)}_ResponseTime(ms)")
     percentile_df.replace(to_replace=np.nan, value=None, inplace=True)
     return percentile_df
 
@@ -51,13 +50,16 @@ def aggregate_data(
     df: pd.DataFrame,
     period_length: str
 ) -> pd.DataFrame:
+    if df.empty:
+        return pd.DataFrame()  # Return an empty DataFrame if input is empty
+
     aggregation_funcs = {
-        'p50': lambda x: np.percentile(x.dropna(), 50),
-        'p95': lambda x: np.percentile(x.dropna(), 95),
-        'p99': lambda x: np.percentile(x.dropna(), 99),
-        'max': lambda x: np.max(x.dropna()),
-        'min': lambda x: np.min(x.dropna()),
-        'average': lambda x: np.mean(x.dropna())
+        'p50': lambda x: np.percentile(x.dropna(), 50) if not x.dropna().empty else np.nan,
+        'p95': lambda x: np.percentile(x.dropna(), 95) if not x.dropna().empty else np.nan,
+        'p99': lambda x: np.percentile(x.dropna(), 99) if not x.dropna().empty else np.nan,
+        'max': lambda x: np.max(x.dropna()) if not x.dropna().empty else np.nan,
+        'min': lambda x: np.min(x.dropna()) if not x.dropna().empty else np.nan,
+        'average': lambda x: np.mean(x.dropna()) if not x.dropna().empty else np.nan
     }
 
     summary_df = df.groupby(pd.Grouper(key='Timestamp', freq=period_length)).agg(
@@ -111,30 +113,31 @@ def evaluate_alarm_state(
 
         for dp in chunk:
             if dp is None:
-                data_point_repr += '-'
+                dp_symbol = '⚫️'
             elif check_condition(dp, threshold, alarm_condition):
-                data_point_repr += 'X'
+                dp_symbol = '🔴'
             else:
-                data_point_repr += '0'
+                dp_symbol = '🟢'
+            data_point_repr += dp_symbol
 
         if len(chunk) < evaluation_range:
-            data_point_repr += '-' * (evaluation_range - len(chunk))
+            data_point_repr += '⚫️' * (evaluation_range - len(chunk))
 
-        if data_point_repr.count('-') > (evaluation_range - datapoints_to_alarm):
-            num_dp_that_must_be_filled = datapoints_to_alarm - sum([data_point_repr.count('0'), data_point_repr.count('X')])
+        if data_point_repr.count('⚫️') > (evaluation_range - datapoints_to_alarm):
+            num_dp_that_must_be_filled = datapoints_to_alarm - sum([data_point_repr.count('🟢'), data_point_repr.count('🔴')])
 
         data_table_dict["DataPoints"].append(data_point_repr)
         data_table_dict["# of data points that must be filled"].append(num_dp_that_must_be_filled)
 
         if num_dp_that_must_be_filled > 0:
-            data_table_dict["MISSING"].append("INSUFFICIENT_DATA" if data_point_repr.count('-') == evaluation_range else "Retain current state")
+            data_table_dict["MISSING"].append("INSUFFICIENT_DATA" if data_point_repr.count('⚫️') == evaluation_range else "Retain current state")
             data_table_dict["IGNORE"].append("Retain current state")
             data_table_dict["BREACHING"].append("ALARM")
             data_table_dict["NOT BREACHING"].append("OK")
         else:
             data_table_dict["MISSING"].append("OK")
             data_table_dict["IGNORE"].append("Retain current state")
-            data_table_dict["BREACHING"].append("ALARM" if 'X' * datapoints_to_alarm in data_point_repr else "OK")
-            data_table_dict["NOT BREACHING"].append("ALARM" if '0' * datapoints_to_alarm not in data_point_repr else "OK")
+            data_table_dict["BREACHING"].append("ALARM" if '🔴' * datapoints_to_alarm in data_point_repr else "OK")
+            data_table_dict["NOT BREACHING"].append("ALARM" if '🟢' * datapoints_to_alarm not in data_point_repr else "OK")
 
     return pd.DataFrame(data_table_dict)
