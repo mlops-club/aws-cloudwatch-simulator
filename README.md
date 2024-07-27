@@ -1,12 +1,14 @@
 ---
-title: {{title}}
-emoji: {{emoji}}
-colorFrom: {{colorFrom}}
-colorTo: {{colorTo}}
-sdk: {{sdk}}
-sdk_version: "{{sdkVersion}}"
+title: AWS CloudWatch Simulator
+emoji: 🚨
+colorFrom: indigo
+colorTo: purple
+sdk: streamlit
+sdk_version: "1.37"
 app_file: app.py
 pinned: false
 ---
 
-Check out the configuration reference at https://huggingface.co/docs/hub/spaces-config-reference
+# AWS CloudWatch Simulator
+
+Learning how to use CloudWatch Metrics and Alarms is hard, but this makes it better! 🎉
