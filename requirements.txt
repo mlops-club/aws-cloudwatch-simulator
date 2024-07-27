@@ -1,6 +1,4 @@
 pandas
 numpy
-ipykernel
-jupyterlab
 streamlit
 matplotlib

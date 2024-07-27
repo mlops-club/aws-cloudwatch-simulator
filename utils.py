@@ -42,13 +42,14 @@ def calculate_percentile(
     freq: str,
     percentile: float
 ) -> pd.DataFrame:
-    percentile_df: pd.DataFrame = df.groupby(pd.Grouper(key='Timestamp', freq=freq))["ResponseTime(ms)"]                                    .quantile(percentile).reset_index(name=f"p{int(percentile * 100)}_ResponseTime(ms)")
+    percentile_df: pd.DataFrame = df.groupby(pd.Grouper(key='Timestamp', freq=freq))["ResponseTime(ms)"]\
+                                    .quantile(percentile).reset_index(name=f"p{int(percentile * 100)}_ResponseTime(ms)")
     percentile_df.replace(to_replace=np.nan, value=None, inplace=True)
     return percentile_df
 
 def aggregate_data(
     df: pd.DataFrame,
-    period_length: str
+    period_length: str,
 ) -> pd.DataFrame:
     if df.empty:
         return pd.DataFrame()  # Return an empty DataFrame if input is empty
@@ -71,6 +72,33 @@ def aggregate_data(
         average=('ResponseTime(ms)', aggregation_funcs['average']),
     ).reset_index()
     return summary_df
+
+def re_aggregate_data(
+    df: pd.DataFrame,
+    period_length: str,
+) -> pd.DataFrame:
+    if df.empty:
+        return pd.DataFrame()  # Return an empty DataFrame if input is empty
+
+    aggregation_funcs = {
+        'p50': lambda x: np.percentile(x.dropna(), 50) if not x.dropna().empty else np.nan,
+        'p95': lambda x: np.percentile(x.dropna(), 95) if not x.dropna().empty else np.nan,
+        'p99': lambda x: np.percentile(x.dropna(), 99) if not x.dropna().empty else np.nan,
+        'max': lambda x: np.max(x.dropna()) if not x.dropna().empty else np.nan,
+        'min': lambda x: np.min(x.dropna()) if not x.dropna().empty else np.nan,
+        'average': lambda x: np.mean(x.dropna()) if not x.dropna().empty else np.nan
+    }
+
+    summary_df = df.groupby(pd.Grouper(key='Timestamp', freq=period_length)).agg(
+        p50=('p50', aggregation_funcs['p50']),
+        p95=('p95', aggregation_funcs['p95']),
+        p99=('p99', aggregation_funcs['p99']),
+        max=('max', aggregation_funcs['max']),
+        min=('min', aggregation_funcs['min']),
+        average=('average', aggregation_funcs['average']),
+    ).reset_index()
+    return summary_df
+
 
 def chunk_list(input_list: List[Any], size: int = 3) -> Iterator[List[Any]]:
     while input_list:

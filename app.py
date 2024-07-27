@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 from datetime import time, date
-from utils import generate_random_data, evaluate_alarm_state, aggregate_data
+from utils import generate_random_data, evaluate_alarm_state, aggregate_data, re_aggregate_data
 from textwrap import dedent
 from matplotlib import pyplot as plt
 
@@ -20,7 +20,7 @@ def main():
 
     if not st.session_state.df.empty:
         display_dataframe("Raw Event Data", st.session_state.df)
-        st.scatter_chart(st.session_state.df.set_index("Timestamp"))
+        st.line_chart(st.session_state.df.set_index("Timestamp"))
 
     # Section 2 - Calculate Aggregations
     st.header("Section 2 - Calculate Aggregations")
@@ -34,7 +34,7 @@ def main():
             key='aggregation_function_input__storage',
             help="Select the aggregation function for visualizing the data."
         )
-        st.line_chart(st.session_state.aggregated_df.set_index("Timestamp")[st.session_state.aggregation_function_input__storage])
+        st.line_chart(st.session_state.aggregated_df.set_index("Timestamp")[aggregation_function_input__storage])
 
     # Section 3 - Summary Data Aggregated by Period
     st.header("Section 3 - Summary Data Aggregated by Period")
@@ -48,7 +48,7 @@ def main():
             key='aggregation_function_input__alarm',
             help="Select the aggregation function for visualizing the data."
         )
-        st.line_chart(st.session_state.summary_by_period_df.set_index("Timestamp")[st.session_state.aggregation_function_input__alarm])
+        st.line_chart(st.session_state.summary_by_period_df.set_index("Timestamp")[aggregation_function_input__alarm])
 
     # Section 4 - Evaluate Alarm State
     st.header("Section 4 - Evaluate Alarm State")
@@ -96,8 +96,8 @@ def aggregation_form() -> None:
 
 def summary_by_period_form() -> None:
     period_length_input = st.selectbox("Period Length", ['1min', '5min', '15min'], key='period_length_input', help="Select the period length for aggregating the summary data.")
-    if not st.session_state.df.empty:
-        st.session_state.summary_by_period_df = aggregate_data(st.session_state.df, period_length_input)
+    if not st.session_state.aggregated_df.empty:
+        st.session_state.summary_by_period_df = re_aggregate_data(st.session_state.aggregated_df, period_length_input)
 
 def alarm_state_form() -> None:
     threshold_input = st.slider("Threshold (ms)", min_value=50, max_value=300, value=150, key='threshold_input', help="Specify the threshold value for evaluating the alarm state.")
@@ -238,3 +238,4 @@ def display_key_tables() -> None:
 
 if __name__ == "__main__":
     main()
+
