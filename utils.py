@@ -31,7 +31,7 @@ def generate_random_data(
         random_response_times[idx] = None
 
     data: Dict[str, Any] = {
-        'Timestamp': random_timestamps,
+        'timestamp': random_timestamps,
         'ResponseTime(ms)': random_response_times
     }
     df: pd.DataFrame = pd.DataFrame(data)
@@ -42,7 +42,7 @@ def calculate_percentile(
     freq: str,
     percentile: float
 ) -> pd.DataFrame:
-    percentile_df: pd.DataFrame = df.groupby(pd.Grouper(key='Timestamp', freq=freq))["ResponseTime(ms)"]\
+    percentile_df: pd.DataFrame = df.groupby(pd.Grouper(key='timestamp', freq=freq))["ResponseTime(ms)"]\
                                     .quantile(percentile).reset_index(name=f"p{int(percentile * 100)}_ResponseTime(ms)")
     percentile_df.replace(to_replace=np.nan, value=None, inplace=True)
     return percentile_df
@@ -63,7 +63,7 @@ def aggregate_data(
         'average': lambda x: np.mean(x.dropna()) if not x.dropna().empty else np.nan
     }
 
-    summary_df = df.groupby(pd.Grouper(key='Timestamp', freq=period_length)).agg(
+    summary_df = df.groupby(pd.Grouper(key='timestamp', freq=period_length)).agg(
         p50=('ResponseTime(ms)', aggregation_funcs['p50']),
         p95=('ResponseTime(ms)', aggregation_funcs['p95']),
         p99=('ResponseTime(ms)', aggregation_funcs['p99']),
@@ -89,7 +89,7 @@ def re_aggregate_data(
         'average': lambda x: np.mean(x.dropna()) if not x.dropna().empty else np.nan
     }
 
-    summary_df = df.groupby(pd.Grouper(key='Timestamp', freq=period_length)).agg(
+    summary_df = df.groupby(pd.Grouper(key='timestamp', freq=period_length)).agg(
         p50=('p50', aggregation_funcs['p50']),
         p95=('p95', aggregation_funcs['p95']),
         p99=('p99', aggregation_funcs['p99']),
@@ -99,6 +99,26 @@ def re_aggregate_data(
     ).reset_index()
     return summary_df
 
+def downsample(df, period_minutes):
+    # Create a new datetime index at specified intervals
+    freq_str = f'{period_minutes}T'
+    new_index = pd.date_range(start=df['timestamp'].min(), end=df['timestamp'].max(), freq=freq_str)
+    
+    # Create an empty DataFrame with the new index
+    df_downsampled = pd.DataFrame(index=new_index)
+    
+    # Set the original DataFrame's index to the timestamp column
+    df.set_index('timestamp', inplace=True)
+    
+    # Interpolate the values for each column
+    for column in df.columns:
+        df_downsampled[column] = df[column].resample(freq_str).interpolate(method='linear')
+    
+    # Reset index to have timestamp as a column again
+    df_downsampled.reset_index(inplace=True)
+    df_downsampled.rename(columns={'index': 'timestamp'}, inplace=True)
+    
+    return df_downsampled
 
 def chunk_list(input_list: List[Any], size: int = 3) -> Iterator[List[Any]]:
     while input_list:
