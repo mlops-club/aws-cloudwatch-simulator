@@ -1,10 +1,9 @@
 import streamlit as st
 import pandas as pd
-import matplotlib.pyplot as plt
-from datetime import datetime, time, date
-from typing import List, Dict, Any, Tuple
+from datetime import time, date
 from utils import generate_random_data, evaluate_alarm_state, aggregate_data
 from textwrap import dedent
+from matplotlib import pyplot as plt
 
 # Constants
 HARD_CODED_DATE = date(2024, 7, 26)
@@ -21,29 +20,42 @@ def main():
 
     if not st.session_state.df.empty:
         display_dataframe("Raw Event Data", st.session_state.df)
-        plot_time_series(st.session_state.df, "ResponseTime(ms)")
+        st.scatter_chart(st.session_state.df.set_index("Timestamp"))
 
     # Section 2 - Calculate Aggregations
     st.header("Section 2 - Calculate Aggregations")
     aggregation_form()
 
     if not st.session_state.aggregated_df.empty:
-        display_dataframe("Aggregated Summary Data", st.session_state.aggregated_df)
-        plot_time_series(st.session_state.aggregated_df, st.session_state.aggregation_function_input)
+        display_dataframe("Aggregated Summary Data (Storage)", st.session_state.aggregated_df)
+        aggregation_function_input__storage = st.selectbox(
+            "Aggregation Function (Storage)",
+            ['p50', 'p95', 'p99', 'max', 'min', 'average'],
+            key='aggregation_function_input__storage',
+            help="Select the aggregation function for visualizing the data."
+        )
+        st.line_chart(st.session_state.aggregated_df.set_index("Timestamp")[st.session_state.aggregation_function_input__storage])
 
     # Section 3 - Summary Data Aggregated by Period
     st.header("Section 3 - Summary Data Aggregated by Period")
     summary_by_period_form()
 
     if not st.session_state.summary_by_period_df.empty:
-        display_dataframe("Summary Data Aggregated by Period", st.session_state.summary_by_period_df)
-        plot_time_series(st.session_state.summary_by_period_df, st.session_state.aggregation_function_input)
+        display_dataframe("Summary Data Aggregated by Period (for Alarm)", st.session_state.summary_by_period_df)
+        aggregation_function_input__alarm = st.selectbox(
+            "Aggregation Function (Alarm)",
+            ['p50', 'p95', 'p99', 'max', 'min', 'average'],
+            key='aggregation_function_input__alarm',
+            help="Select the aggregation function for visualizing the data."
+        )
+        st.line_chart(st.session_state.summary_by_period_df.set_index("Timestamp")[st.session_state.aggregation_function_input__alarm])
 
     # Section 4 - Evaluate Alarm State
     st.header("Section 4 - Evaluate Alarm State")
     alarm_state_form()
 
     if not st.session_state.alarm_state_df.empty:
+        plot_time_series(st.session_state.summary_by_period_df, st.session_state.threshold_input, st.session_state.alarm_condition_input, st.session_state.evaluation_range_input)
         display_alarm_state_evaluation(st.session_state.alarm_state_df)
 
     display_key_tables()
@@ -79,12 +91,6 @@ def generate_data_form() -> None:
 
 def aggregation_form() -> None:
     freq_input = st.selectbox("Period (bin)", ['1min', '5min', '15min'], key='freq_input', help="Select the frequency for aggregating the data.")
-    aggregation_function_input = st.selectbox(
-        "Aggregation Function",
-        ['p50', 'p95', 'p99', 'max', 'min', 'average'],
-        key='aggregation_function_input',
-        help="Select the aggregation function for visualizing the data."
-    )
     if not st.session_state.df.empty:
         st.session_state.aggregated_df = aggregate_data(st.session_state.df, freq_input)
 
@@ -109,7 +115,7 @@ def alarm_state_form() -> None:
             threshold=threshold_input,
             datapoints_to_alarm=datapoints_to_alarm_input,
             evaluation_range=evaluation_range_input,
-            aggregation_function=st.session_state.aggregation_function_input,
+            aggregation_function=st.session_state.aggregation_function_input__alarm,
             alarm_condition=alarm_condition_input
         )
 
@@ -117,9 +123,9 @@ def display_dataframe(title: str, df: pd.DataFrame) -> None:
     st.write(title)
     st.dataframe(df)
 
-def plot_time_series(df: pd.DataFrame, column: str) -> None:
+def plot_time_series(df: pd.DataFrame, threshold: int, alarm_condition: str, evaluation_range: int) -> None:
     timestamps = df['Timestamp']
-    response_times = df[column]
+    response_times = df[st.session_state.aggregation_function_input__alarm]
 
     segments = []
     current_segment = {'timestamps': [], 'values': []}
@@ -140,11 +146,37 @@ def plot_time_series(df: pd.DataFrame, column: str) -> None:
 
     color = 'tab:blue'
     ax1.set_xlabel('Timestamp')
-    ax1.set_ylabel(f'{column} (ms)', color=color)
+    ax1.set_ylabel('Response Time (ms)', color=color)
 
     for segment in segments:
         ax1.plot(segment['timestamps'], segment['values'], color=color, linewidth=0.5)
         ax1.scatter(segment['timestamps'], segment['values'], color=color, s=10)
+
+    line_style = '--' if alarm_condition in ['<', '>'] else '-'
+    ax1.axhline(y=threshold, color='r', linestyle=line_style, linewidth=0.8, label='Threshold')
+    ax1.tick_params(axis='y', labelcolor=color)
+
+    if alarm_condition in ['<=', '<']:
+        ax1.fill_between(timestamps, 0, threshold, color='pink', alpha=0.3)
+    else:
+        ax1.fill_between(timestamps, threshold, response_times.max(), color='pink', alpha=0.3)
+
+    period_indices = range(len(df))
+    ax2 = ax1.twiny()
+    ax2.set_xticks(period_indices)
+    ax2.set_xticklabels(period_indices, fontsize=8)
+    ax2.set_xlabel('Time Periods', fontsize=8)
+    ax2.xaxis.set_tick_params(width=0.5)
+
+    for idx in period_indices:
+        if idx % evaluation_range == 0:
+            ax1.axvline(x=df['Timestamp'].iloc[idx], color='green', linestyle='-', alpha=0.3)
+            max_value = max(filter(lambda x: x is not None, df[st.session_state.aggregation_function_input__alarm]))
+            ax1.text(df['Timestamp'].iloc[idx], max_value * 0.95, f"[{idx // evaluation_range}]", rotation=90, verticalalignment='bottom', color='grey', alpha=0.7, fontsize=8)
+        else:
+            ax1.axvline(x=df['Timestamp'].iloc[idx], color='grey', linestyle='--', alpha=0.3)
+
+    ax1.annotate('Alarm threshold', xy=(0.98, threshold), xycoords=('axes fraction', 'data'), ha='right', va='bottom', fontsize=8, color='red', backgroundcolor='none')
 
     fig.tight_layout()
     st.pyplot(fig)

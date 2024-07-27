@@ -112,7 +112,7 @@ def evaluate_alarm_state(
         num_dp_that_must_be_filled: int = 0
 
         for dp in chunk:
-            if dp is None:
+            if str(dp).lower() == "nan":
                 dp_symbol = '⚫️'
             elif check_condition(dp, threshold, alarm_condition):
                 dp_symbol = '🔴'
